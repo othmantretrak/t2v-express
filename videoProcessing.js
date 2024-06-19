@@ -3,7 +3,6 @@ const ffmpeg = require("fluent-ffmpeg");
 const ffmpegStatic = require("ffmpeg-static");
 const path = require("path");
 const utils = require("./utils");
-const sharp = require("sharp");
 
 ffmpeg.setFfprobePath(path.join("C:", "ffmpeg", "bin", "ffprobe.exe"));
 
