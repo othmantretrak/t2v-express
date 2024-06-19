@@ -15,7 +15,7 @@ exports.downloadVideo = async (url, filepath) => {
     });
     const buffer = await response.data;
     fs.writeFileSync(filepath, buffer);
-    console.log(`Video downloaded successfully to ${outputPath}`);
+    console.log(`Video downloaded successfully to ${filepath}`);
   } catch (error) {
     if (error.response) {
       console.error(
