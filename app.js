@@ -4,6 +4,7 @@ const multer = require("multer");
 const cors = require("cors");
 const videoProcessing = require("./videoProcessing");
 const utils = require("./utils");
+const cloudinary = require("./cloudinaryConfig");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -93,12 +94,12 @@ app.get("/api/cloudinary-videos", async (req, res) => {
           resource_type: "video",
           image_metadata: true, // Include metadata in the response
         });
-
+        console.log(videoInfo);
         return {
           publicId: video.public_id,
           duration: videoInfo.duration,
           url: video.secure_url,
-          title: "",
+          title: videoInfo.tags,
           thumbnail: getThumbnailUrl(video.secure_url),
         };
       })
