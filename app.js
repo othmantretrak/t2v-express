@@ -77,6 +77,52 @@ app.post("/merge-videos", upload.any(), async (req, res) => {
   }
 });
 
+app.get("/api/cloudinary-videos", async (req, res) => {
+  try {
+    const prefix = "t2v/videos";
+    const result = await cloudinary.api.resources({
+      resource_type: "video",
+      max_results: 500,
+      prefix,
+      type: "upload",
+    });
+
+    const videosWithDuration = await Promise.all(
+      result.resources.map(async (video) => {
+        const videoInfo = await cloudinary.api.resource(video.public_id, {
+          resource_type: "video",
+          image_metadata: true, // Include metadata in the response
+        });
+
+        return {
+          publicId: video.public_id,
+          duration: videoInfo.duration,
+          url: video.secure_url,
+          title: "",
+          thumbnail: getThumbnailUrl(video.secure_url),
+        };
+      })
+    );
+
+    res.json(videosWithDuration);
+
+    //res.json(result.resources);
+  } catch (error) {
+    console.error("Error fetching videos:", error);
+    res.status(500).json({ error: "Failed to fetch videos" });
+  }
+});
+function getThumbnailUrl(videoUrl) {
+  // Check if the URL ends with .mp4
+  if (videoUrl.endsWith(".mp4")) {
+    // Replace .mp4 with .jpg
+    return videoUrl.replace(".mp4", ".jpg");
+  } else {
+    // If the URL doesn't end with .mp4, return the original URL
+    console.error("The provided URL does not end with .mp4");
+    return videoUrl;
+  }
+}
 // Serve static files (for accessing the merged video)
 app.use(express.static(path.join(__dirname)));
 
