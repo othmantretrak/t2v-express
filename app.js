@@ -23,7 +23,7 @@ app.post("/merge-videos", upload.any(), async (req, res) => {
 
     if (!audioFile) {
       console.error("No audio file found. Audio file is mandatory.");
-      return [];
+      res.status(500).send("No audio file found. Audio file is mandatory.");
     }
     const audioFilePath = path.join("uploads", audioFile.filename);
     // Create a temporary directory to store individual scene videos
