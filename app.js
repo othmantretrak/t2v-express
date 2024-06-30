@@ -17,13 +17,14 @@ app.use(cors());
 
 // Configure multer for file uploads
 const upload = multer({ dest: "uploads/" });
+const jobStatuses = new Map();
 
 // Worker server URLs
-//const WORKER_SERVERS = ["http://localhost:5001", "http://localhost:5002"];
-const WORKER_SERVERS = [
+const WORKER_SERVERS = ["http://localhost:5001", "http://localhost:5002"];
+/* const WORKER_SERVERS = [
   "https://server-worker1.onrender.com",
   "https://server-worker1-7o56.onrender.com",
-];
+]; */
 
 // Endpoint to generate and merge videos with audio
 app.post("/merge-videos", upload.any(), async (req, res) => {
@@ -78,6 +79,8 @@ async function generateVideo(jobId, scenes, audioFile, req) {
     // Merge processed scenes
     const tempDir = utils.createTempDirectory();
     const mergedVideoPath = path.join(__dirname, `merged_video_${jobId}.mp4`);
+    console.log("Processed scenes:", sortedScenes);
+    console.log("Temp directory:", tempDir);
     await videoProcessing.mergeSceneVideos(
       sortedScenes.map((scene) => scene.path),
       tempDir,
@@ -135,21 +138,24 @@ function distributeScenes(scenes, workerServers, fileBuffers) {
 async function processWorkerTasks(workerTasks) {
   const processedScenes = await Promise.all(
     workerTasks.map(async (task) => {
-      const response = await axios.post(
-        `${task.url}/process-scenes`,
-        {
-          scenes: task.scenes,
-          fileBuffers: task.fileBuffers,
-        },
-        {
-          maxBodyLength: Infinity,
-          maxContentLength: Infinity,
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
+      const response = await axios.post(`${task.url}/process-scenes`, {
+        scenes: task.scenes,
+        fileBuffers: task.fileBuffers,
+      });
+
+      // Save the received video data to local files
+      // Save the received video data to local files
+      return Promise.all(
+        response.data.processedScenes.map(async (scene) => {
+          const tempDir = utils.createTempDirectory();
+          const localPath = path.join(tempDir, `scene_${scene.orderIndex}.mp4`);
+          await fs.promises.writeFile(
+            localPath,
+            Buffer.from(scene.videoData, "base64")
+          );
+          return { ...scene, path: localPath };
+        })
       );
-      return response.data.processedScenes;
     })
   );
   return processedScenes.flat();
@@ -218,7 +224,7 @@ app.listen(PORT, () => {
 });
 
 // Helper functions (you need to implement these)
-const jobStatuses = new Map();
+
 function updateJobStatus(jobId, status, videoUrl = null, error = null) {
   jobStatuses.set(jobId, {
     status,

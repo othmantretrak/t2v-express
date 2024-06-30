@@ -148,6 +148,13 @@ const processImage = async (imageFilePath, outputPath, duration) => {
 exports.mergeSceneVideos = async (sceneVideos, tempDir, outputPath) => {
   const concatFilePath = utils.createConcatFile(sceneVideos, tempDir);
 
+  // Check if all scene videos exist
+  for (const videoPath of sceneVideos) {
+    if (!fs.existsSync(videoPath)) {
+      throw new Error(`Scene video not found: ${videoPath}`);
+    }
+  }
+
   return new Promise((resolve, reject) => {
     ffmpeg()
       .input(concatFilePath)
