@@ -20,11 +20,11 @@ const upload = multer({ dest: "uploads/" });
 const jobStatuses = new Map();
 
 // Worker server URLs
-const WORKER_SERVERS = ["http://localhost:5001", "http://localhost:5002"];
-/* const WORKER_SERVERS = [
+//const WORKER_SERVERS = ["http://localhost:5001", "http://localhost:5002"];
+const WORKER_SERVERS = [
   "https://server-worker1.onrender.com",
   "https://server-worker1-7o56.onrender.com",
-]; */
+];
 
 // Endpoint to generate and merge videos with audio
 app.post("/merge-videos", upload.any(), async (req, res) => {
