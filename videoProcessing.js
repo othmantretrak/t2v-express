@@ -2,14 +2,16 @@
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegStatic = require("ffmpeg-static");
 const path = require("path");
+const fs = require("fs");
 const utils = require("./utils");
 
 ffmpeg.setFfprobePath(path.join("C:", "ffmpeg", "bin", "ffprobe.exe"));
-
 ffmpeg.setFfmpegPath(ffmpegStatic);
 
-exports.generateSceneVideos = async (scenes, tempDir, req) => {
-  const sceneVideos = [];
+exports.processScenes = async (scenes) => {
+  const processedScenes = [];
+  const tempDir = utils.createTempDirectory();
+
   for (let i = 0; i < scenes.length; i++) {
     const { paragraph, videoUrlOrImageFile, duration } = scenes[i];
     const sceneVideoPath = path.join(tempDir, `scene_${i}.mp4`);
@@ -20,50 +22,46 @@ exports.generateSceneVideos = async (scenes, tempDir, req) => {
       await utils.downloadVideo(videoUrlOrImageFile, downloadedFilePath);
 
       // Process the downloaded video
-      await new Promise((resolve, reject) => {
-        ffmpeg(downloadedFilePath)
-          .inputOptions([
-            "-stream_loop",
-            "-1", // Loop the input video indefinitely
-          ])
-          .noAudio()
-          .duration(duration) // Set the output duration
-          .outputOptions(["-vcodec", "libx264"])
-          .output(sceneVideoPath)
-          .on("start", (commandLine) => {
-            console.log("Generating scene video with command: " + commandLine);
-          })
-          .on("end", () => {
-            console.log("Processing remote video finished successfully");
-            resolve();
-          })
-          .on("error", (err, stdout, stderr) => {
-            console.error("Error: " + err.message);
-            console.error("FFmpeg stderr: " + stderr);
-            reject(err);
-          })
-          .run();
-      });
+      await processVideo(downloadedFilePath, sceneVideoPath, duration);
     } else {
       // If videoUrlOrImageFile is a file, process the uploaded image
-      const imageFile = req.files.find(
-        (file) => file.fieldname === `imageFile-${i}`
-      );
-      if (imageFile) {
-        const imageFilePath = path.join("uploads", imageFile.filename);
-        await processImage(imageFilePath, sceneVideoPath, duration);
-      } else {
-        console.error(`No file found for imageFile-${i}`);
-        continue; // Skip the scene with invalid data
-      }
+      await processImage(videoUrlOrImageFile, sceneVideoPath, duration);
     }
 
-    sceneVideos.push(sceneVideoPath);
+    processedScenes.push(sceneVideoPath);
   }
-  return sceneVideos;
+
+  return processedScenes;
 };
 
-const processImage = async (imageFilePath, sceneVideoPath, duration) => {
+const processVideo = async (inputPath, outputPath, duration) => {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .inputOptions([
+        "-stream_loop",
+        "-1", // Loop the input video indefinitely
+      ])
+      .noAudio()
+      .duration(duration) // Set the output duration
+      .outputOptions(["-vcodec", "libx264"])
+      .output(outputPath)
+      .on("start", (commandLine) => {
+        console.log("Processing video with command: " + commandLine);
+      })
+      .on("end", () => {
+        console.log("Processing video finished successfully");
+        resolve();
+      })
+      .on("error", (err, stdout, stderr) => {
+        console.error("Error: " + err.message);
+        console.error("FFmpeg stderr: " + stderr);
+        reject(err);
+      })
+      .run();
+  });
+};
+
+const processImage = async (imageFilePath, outputPath, duration) => {
   return new Promise((resolve, reject) => {
     ffmpeg(imageFilePath)
       .inputOptions([`-framerate 1/${duration}`])
@@ -76,11 +74,11 @@ const processImage = async (imageFilePath, sceneVideoPath, duration) => {
             force_original_aspect_ratio: "decrease",
             flags: "fast_bilinear",
           },
-          outputs: "scaled", // Add an output label for this filter
+          outputs: "scaled",
         },
         {
           filter: "split",
-          inputs: "scaled", // Use the output label from the previous filter as input
+          inputs: "scaled",
           outputs: ["original", "copy"],
         },
         {
@@ -92,14 +90,14 @@ const processImage = async (imageFilePath, sceneVideoPath, duration) => {
             force_original_aspect_ratio: "increase",
             flags: "fast_bilinear",
           },
-          outputs: "scaled_copy", // Add an output label for this filter
+          outputs: "scaled_copy",
         },
         {
           filter: "gblur",
           options: {
             sigma: 10,
           },
-          inputs: "scaled_copy", // Use the output label from the previous filter as input
+          inputs: "scaled_copy",
           outputs: "blurred",
         },
         {
@@ -119,23 +117,23 @@ const processImage = async (imageFilePath, sceneVideoPath, duration) => {
             y: "(main_h-overlay_h)/2",
           },
           inputs: ["blurred-copy", "original"],
-          outputs: "overlaid", // Add an output label for this filter
+          outputs: "overlaid",
         },
         {
           filter: "setsar",
-          inputs: "overlaid", // Use the output label from the previous filter as input
+          inputs: "overlaid",
           options: "1",
         },
       ])
       .outputOptions(["-c:v libx264", "-r 30", "-pix_fmt yuv420p"])
       .on("start", (commandLine) => {
-        console.log("Spawned FFmpeg with command: " + commandLine);
+        console.log("Processing image with command: " + commandLine);
       })
       .on("progress", (progress) => {
         console.log("Processing: " + progress.percent + "% done");
       })
       .on("end", () => {
-        console.log("Processing finished successfully");
+        console.log("Processing image finished successfully");
         resolve();
       })
       .on("error", (err, stdout, stderr) => {
@@ -143,14 +141,14 @@ const processImage = async (imageFilePath, sceneVideoPath, duration) => {
         console.error("FFmpeg stderr: " + stderr);
         reject(err);
       })
-      .save(sceneVideoPath);
+      .save(outputPath);
   });
 };
 
 exports.mergeSceneVideos = async (sceneVideos, tempDir, outputPath) => {
   const concatFilePath = utils.createConcatFile(sceneVideos, tempDir);
 
-  await new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     ffmpeg()
       .input(concatFilePath)
       .inputOptions(["-f", "concat", "-safe", "0"])
@@ -163,7 +161,7 @@ exports.mergeSceneVideos = async (sceneVideos, tempDir, outputPath) => {
         console.log("Processing: " + progress.percent + "% done");
       })
       .on("end", () => {
-        console.log(" Merging scene videos finished successfully");
+        console.log("Merging scene videos finished successfully");
         resolve();
       })
       .on("error", (err, stdout, stderr) => {
@@ -176,7 +174,7 @@ exports.mergeSceneVideos = async (sceneVideos, tempDir, outputPath) => {
 };
 
 exports.mergeAudioWithVideo = async (videoPath, audioFilePath, outputPath) => {
-  await new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     ffmpeg()
       .input(videoPath)
       .input(audioFilePath)
@@ -188,7 +186,7 @@ exports.mergeAudioWithVideo = async (videoPath, audioFilePath, outputPath) => {
         console.log("Processing: " + progress.percent + "% done");
       })
       .on("end", () => {
-        console.log(" Merging audio with video finished successfully");
+        console.log("Merging audio with video finished successfully");
         resolve();
       })
       .on("error", (err, stdout, stderr) => {

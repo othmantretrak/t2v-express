@@ -3,6 +3,14 @@
 # dependencies
 /node_modules
 node_modules
+worker1-server
+/worker1-server
+worker2-server
+/worker2-server
+uploads
+/uploads
+final_*
+merged_*
 /.pnp
 .pnp.js
 .yarn/install-state.gz
